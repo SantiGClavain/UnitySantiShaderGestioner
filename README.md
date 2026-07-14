@@ -1,19 +1,15 @@
-# Super Santi Shader Gestioner
+# Virtualware Shader Manager
 
-Personal Unity editor tool for inspecting materials and changing their shaders from an `EditorWindow`.
+A Unity Editor tool for inspecting project materials.
 
-## Use as a local package
+## Installation
 
-1. Open a Unity project.
-2. Go to `Window > Package Manager`.
-3. Press `+ > Add package from disk...`.
-4. Select this repository's `package.json`.
-5. Open the tool from `Tools > Super Santi Shader Gestioner`.
+1. Open your Unity project.
+2. Download either `VWShaderGestionerWindow.zip` or the `VWShaderGestionerWindow.cs` file located in the `Editor` folder.
+3. Copy `VWShaderGestionerWindow.cs` (found inside the ZIP, in the repository's `Editor` folder) into your project's `Assets/Editor` folder.
+4. Wait for Unity to finish compiling and refreshing the project.
+5. Open the tool from `Tools > Virtualware Shader Manager`.
 
-## Current features
+## Uninstallation
 
-- Select a target `Material`.
-- Load the currently selected material from the Project window.
-- Select a target `Shader`.
-- Apply the shader to the material with Undo support.
-- Ping the material in the Project window.
+To remove the tool from your project, simply delete the `VWShaderGestionerWindow.cs` file that you copied into the `Assets/Editor` folder.
