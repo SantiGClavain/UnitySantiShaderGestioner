@@ -1,0 +1,10 @@
+{
+  "name": "com.santi.shader-gestioner",
+  "version": "0.1.0",
+  "displayName": "Super Santi Shader Gestioner",
+  "description": "Personal Unity editor tooling for inspecting and changing material shaders.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Santi"
+  }
+}
