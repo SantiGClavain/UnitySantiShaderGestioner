@@ -28,6 +28,7 @@ namespace VWShaderGestioner.Editor
         private const float InstColumnWidth = 32f;
         private const float MaterialColumnWidth = 190f;
         private const float ShaderColumnWidth = 190f;
+        private const float MeshRendererColumnWidth = 92f;
         private const float TextureColumnWidth = 230f;
         private const float TextureAssetsColumnWidth = 52f;
         private const float TextureInputColumnWidth = 190f;
@@ -272,6 +273,10 @@ namespace VWShaderGestioner.Editor
                         MaterialSortColumn.Shader,
                         new GUIContent("Shader", "Sorts materials alphabetically by shader name."),
                         GUILayout.Width(ShaderColumnWidth));
+                    DrawSortHeader(
+                        MaterialSortColumn.MeshRenderer,
+                        new GUIContent("Mesh_Renderer", "Indicates whether Mesh Renderers using this material are enabled in the current scene."),
+                        GUILayout.Width(MeshRendererColumnWidth));
                     DrawFlexibleSortHeader(
                         MaterialSortColumn.Path,
                         new GUIContent("Path", "Sorts materials alphabetically by project path."));
@@ -299,6 +304,7 @@ namespace VWShaderGestioner.Editor
                             GUILayout.Width(InstColumnWidth));
                         DrawMaterialProjectField(materialEntry);
                         EditorGUILayout.LabelField(materialEntry.ShaderName, EditorStyles.miniLabel, GUILayout.Width(ShaderColumnWidth));
+                        EditorGUILayout.LabelField(GetMeshRendererDisplayValue(materialEntry), EditorStyles.miniLabel, GUILayout.Width(MeshRendererColumnWidth));
                         DrawFlexibleMiniLabel(materialEntry.Path);
                     }
                 }
@@ -1133,6 +1139,12 @@ namespace VWShaderGestioner.Editor
         private void CollectCurrentSceneMaterialUsage(Dictionary<string, MaterialEntry> materialsByPath)
         {
             currentSceneMaterialPaths.Clear();
+
+            foreach (MaterialEntry materialEntry in materialsByPath.Values)
+            {
+                materialEntry.ResetCurrentSceneMeshRendererState();
+            }
+
             Scene activeScene = SceneManager.GetActiveScene();
 
             if (!activeScene.IsValid() || !activeScene.isLoaded)
@@ -1157,9 +1169,15 @@ namespace VWShaderGestioner.Editor
 
                         string materialPath = AssetDatabase.GetAssetPath(sharedMaterial);
 
-                        if (materialsByPath.ContainsKey(materialPath))
+                        if (materialsByPath.TryGetValue(materialPath, out MaterialEntry materialEntry))
                         {
                             currentSceneMaterialPaths.Add(materialPath);
+
+                            MeshRenderer meshRenderer = renderer as MeshRenderer;
+                            if (meshRenderer != null)
+                            {
+                                materialEntry.AddCurrentSceneMeshRendererState(meshRenderer.enabled);
+                            }
                         }
                     }
                 }
@@ -1205,6 +1223,12 @@ namespace VWShaderGestioner.Editor
                     break;
                 case MaterialSortColumn.Shader:
                     result = string.Compare(left.ShaderName, right.ShaderName, System.StringComparison.OrdinalIgnoreCase);
+                    break;
+                case MaterialSortColumn.MeshRenderer:
+                    result = string.Compare(
+                        GetMeshRendererDisplayValue(left),
+                        GetMeshRendererDisplayValue(right),
+                        System.StringComparison.OrdinalIgnoreCase);
                     break;
                 case MaterialSortColumn.Path:
                 default:
@@ -1375,6 +1399,16 @@ namespace VWShaderGestioner.Editor
         private bool HasActiveSecondaryFilter()
         {
             return selectedDoneIndex != 0 || selectedShaderGraphIndex != 0;
+        }
+
+        private string GetMeshRendererDisplayValue(MaterialEntry materialEntry)
+        {
+            if (selectedSceneIndex != CurrentSceneOptionIndex)
+            {
+                return "--";
+            }
+
+            return materialEntry.CurrentSceneMeshRendererDisplayValue;
         }
 
         private void SetMaterialSelection(string materialPath, bool isSelected)
@@ -1865,6 +1899,48 @@ namespace VWShaderGestioner.Editor
             public string ShaderName { get; }
             public bool IsShaderGraph { get; }
             public HashSet<string> ScenePaths { get; } = new HashSet<string>();
+            public bool HasCurrentSceneEnabledMeshRenderer { get; private set; }
+            public bool HasCurrentSceneDisabledMeshRenderer { get; private set; }
+            public string CurrentSceneMeshRendererDisplayValue
+            {
+                get
+                {
+                    if (HasCurrentSceneEnabledMeshRenderer && HasCurrentSceneDisabledMeshRenderer)
+                    {
+                        return "Mix";
+                    }
+
+                    if (HasCurrentSceneEnabledMeshRenderer)
+                    {
+                        return "On";
+                    }
+
+                    if (HasCurrentSceneDisabledMeshRenderer)
+                    {
+                        return "Off";
+                    }
+
+                    return "--";
+                }
+            }
+
+            public void ResetCurrentSceneMeshRendererState()
+            {
+                HasCurrentSceneEnabledMeshRenderer = false;
+                HasCurrentSceneDisabledMeshRenderer = false;
+            }
+
+            public void AddCurrentSceneMeshRendererState(bool isEnabled)
+            {
+                if (isEnabled)
+                {
+                    HasCurrentSceneEnabledMeshRenderer = true;
+                }
+                else
+                {
+                    HasCurrentSceneDisabledMeshRenderer = true;
+                }
+            }
         }
 
         private sealed class TextureEntry
@@ -1918,6 +1994,7 @@ namespace VWShaderGestioner.Editor
         {
             Material,
             Shader,
+            MeshRenderer,
             Path
         }
 
