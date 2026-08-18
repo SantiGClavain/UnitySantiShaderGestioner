@@ -18,12 +18,16 @@ namespace VWShaderGestioner.Editor
         private const string CurrentSceneOption = "Current_Scene";
         private const string AllScenesOption = "AllScenes";
         private const string NoSceneOption = "NoScene";
+        private const string BugsOption = "Bugs";
+        private const string BugsInSceneOption = "Bugs_In_Scene";
         private const string DonePrefsKey = "VWShaderGestioner.DoneMaterialPaths";
         private const int ProjectOptionIndex = 0;
         private const int CurrentSceneOptionIndex = 1;
         private const int AllScenesOptionIndex = 2;
         private const int NoSceneOptionIndex = 3;
-        private const int FirstSceneOptionIndex = 4;
+        private const int BugsOptionIndex = 4;
+        private const int BugsInSceneOptionIndex = 5;
+        private const int FirstSceneOptionIndex = 6;
         private const float DoneColumnWidth = 42f;
         private const float InstColumnWidth = 32f;
         private const float MaterialColumnWidth = 190f;
@@ -36,15 +40,22 @@ namespace VWShaderGestioner.Editor
         private const float TextureCopyColumnWidth = 48f;
         private const float TextureThumbnailSize = 18f;
         private const float TextureRowVerticalPadding = 1f;
+        private const float SceneColumnWidth = 190f;
+        private const float SceneOpenColumnWidth = 48f;
+        private const float CheckNameColumnWidth = 210f;
+        private const float CheckStatusColumnWidth = 70f;
         private const float SplitterHeight = 6f;
         private const float MinMaterialsPanelHeight = 140f;
         private const float MinTexturesPanelHeight = 120f;
+        private const float MinScenesPanelHeight = 90f;
+        private const float MinChecksPanelHeight = 92f;
         private const float MinPathColumnWidth = 40f;
 
         private readonly List<MaterialEntry> materials = new List<MaterialEntry>();
         private readonly List<SceneEntry> scenes = new List<SceneEntry>();
         private readonly List<MaterialEntry> filteredMaterials = new List<MaterialEntry>();
         private readonly List<TextureEntry> materialTextures = new List<TextureEntry>();
+        private readonly List<MaterialSceneEntry> materialScenes = new List<MaterialSceneEntry>();
         private readonly Dictionary<Texture, int> textureMaterialUsageCounts = new Dictionary<Texture, int>();
         private readonly HashSet<string> selectedMaterialPaths = new HashSet<string>();
         private readonly HashSet<string> doneMaterialPaths = new HashSet<string>();
@@ -67,7 +78,10 @@ namespace VWShaderGestioner.Editor
 
         private Vector2 materialsScrollPosition;
         private Vector2 texturesScrollPosition;
+        private Vector2 materialScenesScrollPosition;
         private float materialsPanelHeight = 260f;
+        private float materialScenesPanelHeight = 140f;
+        private float materialChecksPanelHeight = 118f;
         private int selectedSceneIndex;
         private int selectedDoneIndex;
         private int selectedShaderGraphIndex;
@@ -75,9 +89,11 @@ namespace VWShaderGestioner.Editor
         private bool findReferencesInScene;
         private bool findReferencesQueued;
         private bool texturesLocked;
+        private bool scenesLocked;
         private bool textureMaterialUsageCountsDirty = true;
         private string activeMaterialPath;
         private string materialTexturesMaterialName = "No material selected";
+        private string materialScenesMaterialName = "No material selected";
         private MaterialSortColumn sortColumn = MaterialSortColumn.Material;
         private bool sortDescending;
 
@@ -130,6 +146,8 @@ namespace VWShaderGestioner.Editor
             EditorGUILayout.Space(8f);
 
             ClampMaterialsPanelHeight();
+            ClampMaterialScenesPanelHeight();
+            ClampMaterialChecksPanelHeight();
 
             using (new EditorGUILayout.VerticalScope())
             {
@@ -143,6 +161,19 @@ namespace VWShaderGestioner.Editor
                 using (new EditorGUILayout.VerticalScope(GUILayout.ExpandHeight(true)))
                 {
                     DrawMaterialTextures();
+                    DrawMaterialScenesSplitter();
+
+                    using (new EditorGUILayout.VerticalScope(GUILayout.Height(materialScenesPanelHeight)))
+                    {
+                        DrawMaterialScenes();
+                    }
+
+                    DrawMaterialChecksSplitter();
+
+                    using (new EditorGUILayout.VerticalScope(GUILayout.Height(materialChecksPanelHeight)))
+                    {
+                        DrawMaterialChecks();
+                    }
                 }
             }
         }
@@ -347,6 +378,74 @@ namespace VWShaderGestioner.Editor
             }
         }
 
+        private void DrawMaterialScenesSplitter()
+        {
+            int controlId = GUIUtility.GetControlID(FocusType.Passive);
+            Rect splitterRect = GUILayoutUtility.GetRect(0f, SplitterHeight, GUILayout.ExpandWidth(true));
+            EditorGUIUtility.AddCursorRect(splitterRect, MouseCursor.ResizeVertical);
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                EditorGUI.DrawRect(splitterRect, new Color(0.22f, 0.22f, 0.22f, 1f));
+                Rect handleRect = new Rect(splitterRect.x, splitterRect.y + 2f, splitterRect.width, 1f);
+                EditorGUI.DrawRect(handleRect, new Color(0.45f, 0.45f, 0.45f, 1f));
+            }
+
+            if (Event.current.type == EventType.MouseDown && splitterRect.Contains(Event.current.mousePosition))
+            {
+                GUIUtility.hotControl = controlId;
+                Event.current.Use();
+            }
+
+            if (GUIUtility.hotControl == controlId && Event.current.type == EventType.MouseDrag)
+            {
+                materialScenesPanelHeight -= Event.current.delta.y;
+                ClampMaterialScenesPanelHeight();
+                Repaint();
+                Event.current.Use();
+            }
+
+            if (GUIUtility.hotControl == controlId && Event.current.type == EventType.MouseUp)
+            {
+                GUIUtility.hotControl = 0;
+                Event.current.Use();
+            }
+        }
+
+        private void DrawMaterialChecksSplitter()
+        {
+            int controlId = GUIUtility.GetControlID(FocusType.Passive);
+            Rect splitterRect = GUILayoutUtility.GetRect(0f, SplitterHeight, GUILayout.ExpandWidth(true));
+            EditorGUIUtility.AddCursorRect(splitterRect, MouseCursor.ResizeVertical);
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                EditorGUI.DrawRect(splitterRect, new Color(0.22f, 0.22f, 0.22f, 1f));
+                Rect handleRect = new Rect(splitterRect.x, splitterRect.y + 2f, splitterRect.width, 1f);
+                EditorGUI.DrawRect(handleRect, new Color(0.45f, 0.45f, 0.45f, 1f));
+            }
+
+            if (Event.current.type == EventType.MouseDown && splitterRect.Contains(Event.current.mousePosition))
+            {
+                GUIUtility.hotControl = controlId;
+                Event.current.Use();
+            }
+
+            if (GUIUtility.hotControl == controlId && Event.current.type == EventType.MouseDrag)
+            {
+                materialChecksPanelHeight -= Event.current.delta.y;
+                ClampMaterialChecksPanelHeight();
+                Repaint();
+                Event.current.Use();
+            }
+
+            if (GUIUtility.hotControl == controlId && Event.current.type == EventType.MouseUp)
+            {
+                GUIUtility.hotControl = 0;
+                Event.current.Use();
+            }
+        }
+
         private void DrawMaterialProjectField(MaterialEntry materialEntry)
         {
             Rect fieldRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(MaterialColumnWidth));
@@ -364,12 +463,42 @@ namespace VWShaderGestioner.Editor
         {
             float maxMaterialsPanelHeight = Mathf.Max(
                 MinMaterialsPanelHeight,
-                position.height - MinTexturesPanelHeight - SplitterHeight - 120f);
+                position.height - MinTexturesPanelHeight - MinScenesPanelHeight - MinChecksPanelHeight - SplitterHeight * 3f - 120f);
 
             materialsPanelHeight = Mathf.Clamp(
                 materialsPanelHeight,
                 MinMaterialsPanelHeight,
                 maxMaterialsPanelHeight);
+        }
+
+        private void ClampMaterialScenesPanelHeight()
+        {
+            float lowerPanelHeight = Mathf.Max(
+                MinTexturesPanelHeight + MinScenesPanelHeight + MinChecksPanelHeight + SplitterHeight * 2f,
+                position.height - materialsPanelHeight - SplitterHeight - 120f);
+            float maxScenesPanelHeight = Mathf.Max(
+                MinScenesPanelHeight,
+                lowerPanelHeight - MinTexturesPanelHeight - MinChecksPanelHeight - SplitterHeight * 2f);
+
+            materialScenesPanelHeight = Mathf.Clamp(
+                materialScenesPanelHeight,
+                MinScenesPanelHeight,
+                maxScenesPanelHeight);
+        }
+
+        private void ClampMaterialChecksPanelHeight()
+        {
+            float lowerPanelHeight = Mathf.Max(
+                MinTexturesPanelHeight + MinScenesPanelHeight + MinChecksPanelHeight + SplitterHeight * 2f,
+                position.height - materialsPanelHeight - SplitterHeight - 120f);
+            float maxChecksPanelHeight = Mathf.Max(
+                MinChecksPanelHeight,
+                lowerPanelHeight - MinTexturesPanelHeight - MinScenesPanelHeight - SplitterHeight * 2f);
+
+            materialChecksPanelHeight = Mathf.Clamp(
+                materialChecksPanelHeight,
+                MinChecksPanelHeight,
+                maxChecksPanelHeight);
         }
 
         private void DrawSortHeader(MaterialSortColumn headerSortColumn, GUIContent content, params GUILayoutOption[] options)
@@ -500,6 +629,389 @@ namespace VWShaderGestioner.Editor
 
                 EditorGUILayout.EndScrollView();
             }
+        }
+
+        private void DrawMaterialScenes()
+        {
+            MaterialEntry activeMaterialEntry = GetActiveMaterialEntry();
+
+            if (!scenesLocked)
+            {
+                RebuildMaterialScenes(activeMaterialEntry);
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool newScenesLocked = GUILayout.Toggle(
+                    scenesLocked,
+                    new GUIContent(string.Empty, "Locks the scene list so it does not refresh when the selected material changes."),
+                    "IN LockButton",
+                    GUILayout.Width(20f));
+
+                if (newScenesLocked != scenesLocked)
+                {
+                    scenesLocked = newScenesLocked;
+
+                    if (!scenesLocked)
+                    {
+                        UpdateActiveMaterialFromUnitySelection();
+                        activeMaterialEntry = GetActiveMaterialEntry();
+                        RebuildMaterialScenes(activeMaterialEntry);
+                    }
+                }
+
+                EditorGUILayout.LabelField($"Material Scenes - {materialScenesMaterialName}", EditorStyles.boldLabel);
+            }
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox, GUILayout.ExpandHeight(true)))
+            {
+                EditorGUILayout.LabelField(
+                    $"Scenes: {materialScenes.Count}",
+                    EditorStyles.miniLabel);
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("Scene", EditorStyles.miniLabel, GUILayout.Width(SceneColumnWidth));
+                    DrawFlexibleMiniLabel("Path");
+                    EditorGUILayout.LabelField("Open", EditorStyles.miniLabel, GUILayout.Width(SceneOpenColumnWidth));
+                }
+
+                materialScenesScrollPosition = EditorGUILayout.BeginScrollView(materialScenesScrollPosition, GUILayout.ExpandHeight(true));
+
+                for (int sceneIndex = 0; sceneIndex < materialScenes.Count; sceneIndex++)
+                {
+                    MaterialSceneEntry sceneEntry = materialScenes[sceneIndex];
+
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        DrawSceneProjectField(sceneEntry, SceneColumnWidth);
+                        DrawFlexibleMiniLabel(sceneEntry.Path);
+
+                        using (new EditorGUI.DisabledScope(sceneEntry.SceneAsset == null))
+                        {
+                            if (GUILayout.Button(new GUIContent("Open", "Opens this scene asset."), EditorStyles.miniButton, GUILayout.Width(SceneOpenColumnWidth)))
+                            {
+                                AssetDatabase.OpenAsset(sceneEntry.SceneAsset);
+                            }
+                        }
+                    }
+                }
+
+                if (materialScenes.Count == 0)
+                {
+                    EditorGUILayout.LabelField("No scene usage found.", EditorStyles.miniLabel);
+                }
+
+                EditorGUILayout.EndScrollView();
+            }
+        }
+
+        private void DrawSceneProjectField(MaterialSceneEntry sceneEntry, float width)
+        {
+            Rect fieldRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(width));
+
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && fieldRect.Contains(Event.current.mousePosition))
+            {
+                if (sceneEntry.SceneAsset != null)
+                {
+                    Selection.activeObject = sceneEntry.SceneAsset;
+                    EditorGUIUtility.PingObject(sceneEntry.SceneAsset);
+                }
+
+                Event.current.Use();
+            }
+
+            EditorGUI.ObjectField(fieldRect, sceneEntry.SceneAsset, typeof(SceneAsset), false);
+        }
+
+        private void DrawMaterialChecks()
+        {
+            MaterialEntry activeMaterialEntry = GetActiveMaterialEntry();
+            MaterialCheckEntry[] checks = BuildMaterialChecks(activeMaterialEntry);
+            string materialName = activeMaterialEntry != null && activeMaterialEntry.Material != null
+                ? activeMaterialEntry.Material.name
+                : "No material selected";
+
+            EditorGUILayout.LabelField($"Material Checks - {materialName}", EditorStyles.boldLabel);
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox, GUILayout.ExpandHeight(true)))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("Check", EditorStyles.miniLabel, GUILayout.Width(CheckNameColumnWidth));
+                    EditorGUILayout.LabelField("Status", EditorStyles.miniLabel, GUILayout.Width(CheckStatusColumnWidth));
+                    DrawFlexibleMiniLabel("Details");
+                }
+
+                foreach (MaterialCheckEntry check in checks)
+                {
+                    DrawMaterialCheckRow(check);
+                }
+            }
+        }
+
+        private static void DrawMaterialCheckRow(MaterialCheckEntry check)
+        {
+            Color statusColor = check.HasProblem
+                ? new Color(0.9f, 0.18f, 0.18f, 1f)
+                : new Color(0.16f, 0.65f, 0.24f, 1f);
+            GUIStyle statusStyle = new GUIStyle(EditorStyles.miniLabel);
+            statusStyle.normal.textColor = statusColor;
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(check.Name, statusStyle, GUILayout.Width(CheckNameColumnWidth));
+                EditorGUILayout.LabelField(check.HasProblem ? "Error" : "OK", statusStyle, GUILayout.Width(CheckStatusColumnWidth));
+                DrawFlexibleMiniLabel(check.Details);
+            }
+        }
+
+        private static MaterialCheckEntry[] BuildMaterialChecks(MaterialEntry materialEntry)
+        {
+            Material material = materialEntry != null ? materialEntry.Material : null;
+            Shader shader = material != null ? material.shader : null;
+            bool shaderIsNull = shader == null;
+
+            MaterialCheckEntry shaderNullCheck = new MaterialCheckEntry(
+                "Shader is null",
+                shaderIsNull,
+                shaderIsNull ? material == null ? "No material selected." : "Material has no shader assigned." : "Shader assigned.");
+
+            MaterialCheckEntry shaderSupportedCheck = new MaterialCheckEntry(
+                "Shader is supported",
+                shaderIsNull || !shader.isSupported,
+                shaderIsNull ? "Cannot check because shader is null." : shader.isSupported ? "Shader reports supported." : "Shader reports unsupported on this editor/platform.");
+
+            bool hasShaderErrors = false;
+            string shaderErrorsDetail = string.Empty;
+            bool shaderErrorsKnown = !shaderIsNull && TryGetShaderErrorState(shader, out hasShaderErrors, out shaderErrorsDetail);
+            MaterialCheckEntry shaderErrorsCheck = new MaterialCheckEntry(
+                "Shader has errors",
+                shaderIsNull || hasShaderErrors,
+                shaderIsNull
+                    ? "Cannot check because shader is null."
+                    : shaderErrorsKnown
+                        ? hasShaderErrors ? shaderErrorsDetail : "No shader errors reported."
+                        : "Unity ShaderUtil error API was not available; no confirmed shader errors.");
+
+            bool pipelineCompatible = true;
+            string pipelineDetail = string.Empty;
+            bool pipelineKnown = !shaderIsNull && TryGetPipelineCompatibility(material, out pipelineCompatible, out pipelineDetail);
+            MaterialCheckEntry pipelineTagCheck = new MaterialCheckEntry(
+                "Pipeline tag compatible",
+                shaderIsNull || !pipelineCompatible,
+                shaderIsNull
+                    ? "Cannot check because shader is null."
+                    : pipelineKnown
+                        ? pipelineDetail
+                        : "Could not determine active render pipeline; no confirmed tag incompatibility.");
+
+            return new[]
+            {
+                shaderNullCheck,
+                shaderSupportedCheck,
+                shaderErrorsCheck,
+                pipelineTagCheck
+            };
+        }
+
+        private static bool TryGetShaderErrorState(Shader shader, out bool hasErrors, out string detail)
+        {
+            hasErrors = false;
+            detail = string.Empty;
+
+            MethodInfo shaderHasErrorMethod =
+                GetShaderUtilMethod("ShaderHasError", typeof(Shader))
+                ?? GetShaderUtilMethod("ShaderHasErrors", typeof(Shader))
+                ?? GetShaderUtilMethod("HasShaderError", typeof(Shader))
+                ?? GetShaderUtilMethod("HasShaderErrors", typeof(Shader));
+
+            if (shaderHasErrorMethod == null || shaderHasErrorMethod.ReturnType != typeof(bool))
+            {
+                return false;
+            }
+
+            hasErrors = (bool)shaderHasErrorMethod.Invoke(null, new object[] { shader });
+            detail = hasErrors ? GetShaderErrorDetails(shader) : string.Empty;
+
+            if (hasErrors && string.IsNullOrEmpty(detail))
+            {
+                detail = "ShaderUtil reports shader errors.";
+            }
+
+            return true;
+        }
+
+        private static string GetShaderErrorDetails(Shader shader)
+        {
+            MethodInfo getShaderMessagesMethod = GetShaderUtilMethod("GetShaderMessages", typeof(Shader));
+
+            if (getShaderMessagesMethod == null)
+            {
+                return string.Empty;
+            }
+
+            object messagesObject = getShaderMessagesMethod.Invoke(null, new object[] { shader });
+            System.Array messages = messagesObject as System.Array;
+
+            if (messages == null || messages.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            StringBuilder builder = new StringBuilder();
+            int appendedMessages = 0;
+
+            foreach (object message in messages)
+            {
+                if (message == null)
+                {
+                    continue;
+                }
+
+                string messageText = ReadShaderMessageText(message);
+
+                if (string.IsNullOrEmpty(messageText))
+                {
+                    continue;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append(" | ");
+                }
+
+                builder.Append(messageText);
+                appendedMessages++;
+
+                if (appendedMessages >= 2)
+                {
+                    break;
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static string ReadShaderMessageText(object message)
+        {
+            System.Type messageType = message.GetType();
+            string[] memberNames =
+            {
+                "message",
+                "messageDetails",
+                "file"
+            };
+            StringBuilder builder = new StringBuilder();
+
+            foreach (string memberName in memberNames)
+            {
+                FieldInfo field = messageType.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                PropertyInfo property = messageType.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object value = field != null ? field.GetValue(message) : property != null ? property.GetValue(message, null) : null;
+                string text = value as string;
+
+                if (string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append(" - ");
+                }
+
+                builder.Append(text);
+            }
+
+            return builder.Length > 0 ? builder.ToString() : message.ToString();
+        }
+
+        private static bool TryGetPipelineCompatibility(Material material, out bool isCompatible, out string detail)
+        {
+            isCompatible = true;
+            string shaderRenderPipelineTag = material.GetTag("RenderPipeline", false, string.Empty);
+            string activePipelineName = GetActiveRenderPipelineName();
+            string expectedPipelineTag = GetExpectedRenderPipelineTag(activePipelineName);
+
+            if (activePipelineName == null)
+            {
+                detail = string.Empty;
+                return false;
+            }
+
+            if (expectedPipelineTag == null)
+            {
+                detail = $"Active pipeline '{activePipelineName}' is not mapped to a known RenderPipeline tag.";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(expectedPipelineTag))
+            {
+                isCompatible = string.IsNullOrEmpty(shaderRenderPipelineTag);
+                detail = isCompatible
+                    ? "Built-in pipeline active and shader has no RenderPipeline tag."
+                    : $"Built-in pipeline active but shader tag is '{shaderRenderPipelineTag}'.";
+                return true;
+            }
+
+            isCompatible = string.Equals(shaderRenderPipelineTag, expectedPipelineTag, System.StringComparison.OrdinalIgnoreCase);
+            detail = isCompatible
+                ? $"Active pipeline '{activePipelineName}' matches shader tag '{shaderRenderPipelineTag}'."
+                : $"Active pipeline '{activePipelineName}' expects tag '{expectedPipelineTag}', shader tag is '{FormatEmptyTag(shaderRenderPipelineTag)}'.";
+            return true;
+        }
+
+        private static string GetActiveRenderPipelineName()
+        {
+            System.Type graphicsSettingsType = typeof(UnityEngine.Rendering.GraphicsSettings);
+            PropertyInfo currentRenderPipelineProperty =
+                graphicsSettingsType.GetProperty("currentRenderPipeline", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                ?? graphicsSettingsType.GetProperty("renderPipelineAsset", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            object renderPipelineAsset = currentRenderPipelineProperty != null
+                ? currentRenderPipelineProperty.GetValue(null, null)
+                : null;
+
+            if (renderPipelineAsset == null)
+            {
+                return string.Empty;
+            }
+
+            System.Type pipelineType = renderPipelineAsset.GetType();
+            return !string.IsNullOrEmpty(pipelineType.FullName) ? pipelineType.FullName : pipelineType.Name;
+        }
+
+        private static string GetExpectedRenderPipelineTag(string activePipelineName)
+        {
+            if (activePipelineName == null)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(activePipelineName))
+            {
+                return string.Empty;
+            }
+
+            if (activePipelineName.IndexOf("Universal", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || activePipelineName.IndexOf("URP", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "UniversalPipeline";
+            }
+
+            if (activePipelineName.IndexOf("HDRenderPipeline", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || activePipelineName.IndexOf("HighDefinition", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || activePipelineName.IndexOf("HDRP", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "HDRenderPipeline";
+            }
+
+            return null;
+        }
+
+        private static string FormatEmptyTag(string shaderRenderPipelineTag)
+        {
+            return string.IsNullOrEmpty(shaderRenderPipelineTag) ? "<empty>" : shaderRenderPipelineTag;
         }
 
         private void DrawTextureValueField(TextureEntry textureEntry, float width, int rowIndex)
@@ -688,6 +1200,28 @@ namespace VWShaderGestioner.Editor
             }
 
             materialTextures.Sort(CompareTextureEntries);
+        }
+
+        private void RebuildMaterialScenes(MaterialEntry materialEntry)
+        {
+            materialScenes.Clear();
+            materialScenesMaterialName = materialEntry != null && materialEntry.Material != null
+                ? materialEntry.Material.name
+                : "No material selected";
+
+            if (materialEntry == null || materialEntry.Material == null)
+            {
+                return;
+            }
+
+            foreach (string scenePath in materialEntry.ScenePaths)
+            {
+                SceneAsset sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath);
+                string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+                materialScenes.Add(new MaterialSceneEntry(sceneName, scenePath, sceneAsset));
+            }
+
+            materialScenes.Sort((left, right) => string.Compare(left.Name, right.Name, System.StringComparison.OrdinalIgnoreCase));
         }
 
         private static int CompareTextureEntries(TextureEntry left, TextureEntry right)
@@ -1291,6 +1825,16 @@ namespace VWShaderGestioner.Editor
                 return materialEntry.ScenePaths.Count == 0;
             }
 
+            if (selectedSceneIndex == BugsOptionIndex)
+            {
+                return HasMaterialCheckProblems(materialEntry);
+            }
+
+            if (selectedSceneIndex == BugsInSceneOptionIndex)
+            {
+                return currentSceneMaterialPaths.Contains(materialEntry.Path) && HasMaterialCheckProblems(materialEntry);
+            }
+
             int sceneIndex = selectedSceneIndex - FirstSceneOptionIndex;
 
             if (sceneIndex < 0 || sceneIndex >= scenes.Count)
@@ -1365,6 +1909,16 @@ namespace VWShaderGestioner.Editor
                 return materialEntry.ScenePaths.Count == 0;
             }
 
+            if (selectedSceneIndex == BugsOptionIndex)
+            {
+                return HasMaterialCheckProblems(materialEntry);
+            }
+
+            if (selectedSceneIndex == BugsInSceneOptionIndex)
+            {
+                return currentSceneMaterialPaths.Contains(materialEntry.Path) && HasMaterialCheckProblems(materialEntry);
+            }
+
             int sceneIndex = selectedSceneIndex - FirstSceneOptionIndex;
 
             if (sceneIndex < 0 || sceneIndex >= scenes.Count)
@@ -1399,6 +1953,21 @@ namespace VWShaderGestioner.Editor
         private bool HasActiveSecondaryFilter()
         {
             return selectedDoneIndex != 0 || selectedShaderGraphIndex != 0;
+        }
+
+        private static bool HasMaterialCheckProblems(MaterialEntry materialEntry)
+        {
+            MaterialCheckEntry[] checks = BuildMaterialChecks(materialEntry);
+
+            foreach (MaterialCheckEntry check in checks)
+            {
+                if (check.HasProblem)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private string GetMeshRendererDisplayValue(MaterialEntry materialEntry)
@@ -1791,6 +2360,8 @@ namespace VWShaderGestioner.Editor
             options[CurrentSceneOptionIndex] = CurrentSceneOption;
             options[AllScenesOptionIndex] = AllScenesOption;
             options[NoSceneOptionIndex] = NoSceneOption;
+            options[BugsOptionIndex] = BugsOption;
+            options[BugsInSceneOptionIndex] = BugsInSceneOption;
 
             for (int i = 0; i < scenes.Count; i++)
             {
@@ -1979,6 +2550,34 @@ namespace VWShaderGestioner.Editor
             public Color ColorValue { get; }
             public MaterialInputGroup InputGroup { get; }
             public int OriginalIndex { get; }
+        }
+
+        private sealed class MaterialSceneEntry
+        {
+            public MaterialSceneEntry(string name, string path, SceneAsset sceneAsset)
+            {
+                Name = name;
+                Path = path;
+                SceneAsset = sceneAsset;
+            }
+
+            public string Name { get; }
+            public string Path { get; }
+            public SceneAsset SceneAsset { get; }
+        }
+
+        private sealed class MaterialCheckEntry
+        {
+            public MaterialCheckEntry(string name, bool hasProblem, string details)
+            {
+                Name = name;
+                HasProblem = hasProblem;
+                Details = details;
+            }
+
+            public string Name { get; }
+            public bool HasProblem { get; }
+            public string Details { get; }
         }
 
         private enum MaterialInputGroup
